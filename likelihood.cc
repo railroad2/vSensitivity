@@ -2,7 +2,7 @@
 #include "TROOT.h"
 #include "TF1.h"
 
-#include "/home/kmlee/opt/vOscillation/vClass.hh"
+#include "../vOscillation/vClass.hh"
 
 //TF1* getPDF0()
 vInterpolator* getPDF0()
@@ -15,7 +15,7 @@ vInterpolator* getPDF0()
     double Lmin = 1.8;
     double Lmax = 20.;
 
-    int npts = 100;
+    int npts = 1000;
 
     vector<double> x, y; 
 
@@ -24,6 +24,45 @@ vInterpolator* getPDF0()
         x.push_back(L);
         y.push_back(det->GetLDistribution(L, 10, 0, 1001, true)/ 0.747);
         cout << L << ' ' << y[i] << endl;
+    }
+
+    vInterpolator *interp = new vInterpolator(x, y);
+
+    return interp;
+}
+
+vInterpolator* getPDF1(double sin2theta14, double Dm2_41)
+{
+
+    vDetectorCylinder *det = new vDetectorCylinder();
+    det->SetRadius(7.5);
+    det->SetHeight(15);
+
+    double Lmin = 1.8;
+    double Lmax = 20.;
+
+    int npts = 1000;
+
+    vSterile* vst = new vSterile();
+    vst->LoadStdData();
+    vst->Load4StdData();
+
+    double theta14 = TMath::ASin(TMath::Sqrt(sin2theta14));
+    double theta24 = TMath::ASin(TMath::Sqrt(0.15));
+    double theta34 = 0.;
+
+    vst->Set4radian(theta14, theta24, theta34); // (theta_14, theta_24, theta_34)
+    vst->Set4Dm2(Dm2_41);
+
+    vector<double> x, y; 
+
+    for (int i=0; i<npts; i++) {
+        double L = (Lmax - Lmin)/npts * i + Lmin;
+        double tmp = det->GetLDistribution(L, 10, 0, 1001, true);
+        double osc = vst->GetProbability(L, 0.747, "e", "e");
+        x.push_back(L);
+        y.push_back(tmp * osc);
+        cout << L << "    " << tmp << "    " << osc << "    " << y[i] << endl;
     }
 
     vInterpolator *interp = new vInterpolator(x, y);
@@ -63,7 +102,7 @@ double* readfile(TString fn)
     return &(arr[0]);
 }
 
-double logLikelihood_unbinned(double* data, TF1* pdf, double theta_14=0, double Dm2_41=0)
+double logLikelihood_unbinned(double* data, TF1* pdf, double sin2theta14=0, double Dm2_41=0)
 {
     double llh = 0;
     double lh = 0;
@@ -72,7 +111,11 @@ double logLikelihood_unbinned(double* data, TF1* pdf, double theta_14=0, double 
     vSterile* vst = new vSterile();
     vst->Load4StdData();
 
-    vst->Set4theta(theta_14, 0, 0); // (theta_14, theta_24, theta_34)
+    double theta14 = TMath::ASin(TMath::Sqrt(sin2theta14));
+    double theta24 = TMath::ASin(TMath::Sqrt(0.15));
+    double theta34 = 0;
+
+    vst->Set4radian(theta14, theta24, theta34); 
     vst->Set4Dm2(Dm2_41);
 
     for (int i=0; i<nbin; i++) {
@@ -81,14 +124,30 @@ double logLikelihood_unbinned(double* data, TF1* pdf, double theta_14=0, double 
             tmp = 1e-31;
         }
         double osc = vst->GetProbability(data[i]/1000., 1, "e", "e");
-        cout << data[i] << '\t'  <<  tmp << '\t' << osc << endl;
-        llh += TMath::Log(tmp*osc);
+        cout << data[i]/1000. << '\t'  <<  tmp << '\t' << osc << endl;
+        llh += TMath::Log(tmp * osc);
     }
     
     return llh;
 }
 
-void likelihood()
+void operation_check()
+{
+    // getting pdf w/o oscillation
+    vInterpolator* interp0 = getPDF0();
+    TF1* pdf0 = interp0->GetTF1();
+
+    // getting pdf with oscillation
+    double Dm2_41 = 0.01;
+    double theta_14 = 0.01;
+    vInterpolator* interp1 = getPDF1(theta_14, Dm2_41);
+    TF1* pdf1 = interp1->GetTF1();
+
+    pdf0->Draw();
+    pdf1->Draw("SAME");
+}
+
+void compute_likelihood_org()
 {
     //double data[100] = {0,};
 
@@ -109,9 +168,43 @@ void likelihood()
     return;
 }
 
-int main()
+void compute_likelihood()
 {
-    likelihood();
+    vInterpolator* interp0 = getPDF0();
+    TF1* pdf0 = interp0->GetTF1();
+
+    double Dm2_41 = 10;
+    double sin2theta14 = 0.1;
+
+    vInterpolator* interp1 = getPDF1(sin2theta14, Dm2_41);
+    TF1* pdf1 = interp1->GetTF1();
+
+    pdf0->SetNormalized(1);
+    pdf1->SetNormalized(1);
+
+    TString fn = "Cr51_L,LoE.dat";
+    double *data = readfile(fn);
+
+    double llh = logLikelihood_unbinned(data, pdf0);
+    double llh1 = logLikelihood_unbinned(data, pdf1);
+
+    cout << "llh : " << llh << endl;
+    cout << "llh1 : " << llh1 << endl;
+
+    pdf0->SetNpx(10000);
+    pdf1->SetNpx(10000);
+    cout << "integral pdf0 = " << pdf0->Integral(2, 19) << endl;
+    cout << "integral pdf1 = " << pdf1->Integral(2, 19) << endl;
+    pdf0->Draw();
+    pdf1->Draw("same");
+
+    return;
+}
+
+int likelihood()
+{
+    compute_likelihood();
+    //operation_check();
     return 0;
 }
 

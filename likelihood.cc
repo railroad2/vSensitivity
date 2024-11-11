@@ -4,6 +4,8 @@
 
 #include "../vOscillation/vClass.hh"
 
+#define DEBUG 0
+
 //TF1* getPDF0()
 vInterpolator* getPDF0()
 {
@@ -23,7 +25,7 @@ vInterpolator* getPDF0()
         double L = (Lmax - Lmin)/npts * i + Lmin;
         x.push_back(L);
         y.push_back(det->GetLDistribution(L, 10, 0, 1001, true)/ 0.747);
-        cout << L << ' ' << y[i] << endl;
+        if (DEBUG > 2) cout << L << ' ' << y[i] << endl;
     }
 
     vInterpolator *interp = new vInterpolator(x, y);
@@ -62,7 +64,7 @@ vInterpolator* getPDF1(double sin2theta14, double Dm2_41)
         double osc = vst->GetProbability(L, 0.747, "e", "e");
         x.push_back(L);
         y.push_back(tmp * osc);
-        cout << L << "    " << tmp << "    " << osc << "    " << y[i] << endl;
+        if (DEBUG > 2) cout << L << "    " << tmp << "    " << osc << "    " << y[i] << endl;
     }
 
     vInterpolator *interp = new vInterpolator(x, y);
@@ -95,7 +97,7 @@ double* readfile(TString fn)
         nlines++;
     }
 
-    cout << nlines << " are read." << endl;
+    cerr << nlines << " are read." << endl;
 
     infile.close();
 
@@ -124,7 +126,9 @@ double logLikelihood_unbinned(double* data, TF1* pdf, double sin2theta14=0, doub
             tmp = 1e-31;
         }
         double osc = vst->GetProbability(data[i]/1000., 1, "e", "e");
-        cout << data[i]/1000. << '\t'  <<  tmp << '\t' << osc << endl;
+
+        if (DEBUG>2) cout << data[i]/1000. << '\t'  <<  tmp << '\t' << osc << endl;
+
         llh += TMath::Log(tmp * osc);
     }
     
@@ -168,13 +172,10 @@ void compute_likelihood_org()
     return;
 }
 
-void compute_likelihood()
+double compute_likelihood_1(double sin2theta14=0, double Dm2_41=0)
 {
     vInterpolator* interp0 = getPDF0();
     TF1* pdf0 = interp0->GetTF1();
-
-    double Dm2_41 = 10;
-    double sin2theta14 = 0.1;
 
     vInterpolator* interp1 = getPDF1(sin2theta14, Dm2_41);
     TF1* pdf1 = interp1->GetTF1();
@@ -191,19 +192,80 @@ void compute_likelihood()
     cout << "llh : " << llh << endl;
     cout << "llh1 : " << llh1 << endl;
 
+    /*
     pdf0->SetNpx(10000);
     pdf1->SetNpx(10000);
     cout << "integral pdf0 = " << pdf0->Integral(2, 19) << endl;
     cout << "integral pdf1 = " << pdf1->Integral(2, 19) << endl;
     pdf0->Draw();
     pdf1->Draw("same");
+    */
 
-    return;
+    return llh1;
+}
+
+double compute_likelihood(double* data, double sin2theta14=0, double Dm2_41=0)
+{
+    vInterpolator* interp1 = getPDF1(sin2theta14, Dm2_41);
+    TF1* pdf1 = interp1->GetTF1();
+
+    pdf1->SetNormalized(1);
+
+    double llh1 = logLikelihood_unbinned(data, pdf1);
+
+    cout << "llh1 : " << llh1 << endl;
+
+    /*
+    pdf0->SetNpx(10000);
+    pdf1->SetNpx(10000);
+    cout << "integral pdf0 = " << pdf0->Integral(2, 19) << endl;
+    cout << "integral pdf1 = " << pdf1->Integral(2, 19) << endl;
+    pdf0->Draw();
+    pdf1->Draw("same");
+    */
+
+    return llh1;
+}
+
+void compute_likelihood_grid()
+{
+    TString fn = "Cr51_L,LoE.dat";
+    double *data = readfile(fn);
+
+    double llh = 0; 
+    int Nx = 10;
+    int Ny = 10;
+    double xmin = 1e-3;
+    double xmax = 1;
+    double ymin = 1e-2;
+    double ymax = 10;
+
+    cout << "#sin2theta14" << '\t';
+    cout << "Dm2_41" << '\t';
+    cout << "llh" << endl;
+    double sin2theta14, Dm2_41;
+
+    for (int i=0; i<Nx; i++) {
+        sin2theta14 = TMath::Power(10, 
+                        (TMath::Log10(xmax) - TMath::Log10(xmin))/Nx*i + TMath::Log10(xmin)
+                      );
+        for (int j=0; j<Ny; j++) {
+            Dm2_41 = TMath::Power(10, 
+                        (TMath::Log10(ymax) - TMath::Log10(ymin))/Ny*j + TMath::Log10(ymin)
+                     );
+
+            llh = compute_likelihood(data, sin2theta14, Dm2_41);
+            cout << sin2theta14 << '\t';
+            cout << Dm2_41 << '\t';
+            cout << llh << endl;
+        }
+    }
+    
 }
 
 int likelihood()
 {
-    compute_likelihood();
+    compute_likelihood_grid();
     //operation_check();
     return 0;
 }

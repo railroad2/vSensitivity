@@ -213,7 +213,7 @@ double compute_likelihood(double* data, double sin2theta14=0, double Dm2_41=0)
 
     double llh1 = logLikelihood_unbinned(data, pdf1);
 
-    cout << "llh1 : " << llh1 << endl;
+    //cerr << "llh1 : " << llh1 << endl;
 
     /*
     pdf0->SetNpx(10000);
